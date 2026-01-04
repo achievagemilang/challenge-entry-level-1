@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { AudioManager } from '@/lib/audio-manager';
+import { Volume2, VolumeX } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Seeded Random Number Generator using Linear Congruential Generator
@@ -64,6 +66,8 @@ export default function GameCanvas({
   onGameOver,
 }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isMuted, setIsMuted] = useState(false);
+
   const gameStateRef = useRef({
     dinoY: 0,
     dinoVelocity: 0,
@@ -78,6 +82,25 @@ export default function GameCanvas({
     framesSinceLastObstacle: 0,
   });
 
+  // Initialize audio manager
+  useEffect(() => {
+    const audioManager = AudioManager.getInstance();
+    setIsMuted(audioManager.getMuteStatus());
+  }, []);
+
+  const toggleMute = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation(); // Prevent jumping when clicking mute
+    const audioManager = AudioManager.getInstance();
+    const newMuteState = !audioManager.getMuteStatus();
+    audioManager.setMute(newMuteState);
+    setIsMuted(newMuteState);
+
+    // Resume context if unmuting
+    if (!newMuteState) {
+      audioManager.resumeContext();
+    }
+  }, []);
+
   const resetGame = useCallback(() => {
     const state = gameStateRef.current;
     state.dinoY = 0;
@@ -91,20 +114,37 @@ export default function GameCanvas({
     state.rng = new SeededRNG(seed);
     state.lastObstacleType = null;
     state.framesSinceLastObstacle = 0;
+
+    // Ensure BGM is playing if not muted
+    const audioManager = AudioManager.getInstance();
+    audioManager.resumeContext();
+    if (!audioManager.getMuteStatus()) {
+      audioManager.startBGM();
+    }
   }, [seed]);
 
   const jump = useCallback(() => {
     const state = gameStateRef.current;
+
+    // Resume audio context on user interaction
+    AudioManager.getInstance().resumeContext();
+
     if (!state.isJumping && !state.gameOver && isRunning) {
       state.isJumping = true;
       state.dinoVelocity = JUMP_FORCE;
       state.isDucking = false;
+      AudioManager.getInstance().playJumpSound();
     }
   }, [isRunning]);
 
   const duck = useCallback((isDucking: boolean) => {
     const state = gameStateRef.current;
     if (state.gameOver) return;
+
+    // Resume audio context on user interaction
+    if (isDucking) {
+      AudioManager.getInstance().resumeContext();
+    }
 
     if (isDucking) {
       if (state.isJumping) {
@@ -131,6 +171,8 @@ export default function GameCanvas({
       } else if (e.code === 'ArrowDown') {
         e.preventDefault();
         duck(true);
+      } else if (e.code === 'KeyM') {
+        toggleMute();
       }
     };
 
@@ -146,8 +188,9 @@ export default function GameCanvas({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      AudioManager.getInstance().stopBGM();
     };
-  }, [jump, duck]);
+  }, [jump, duck, toggleMute]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -262,6 +305,11 @@ export default function GameCanvas({
         lastScoreUpdate = state.score;
       }
 
+      // Play point sound every 100 points
+      if (state.score > 0 && state.score % 100 === 0) {
+        AudioManager.getInstance().playScoreSound();
+      }
+
       // Increase speed gradually (max speed 12)
       if (state.score % 500 === 0 && state.score > 0) {
         state.speed = Math.min(state.speed + 0.3, 12);
@@ -295,6 +343,8 @@ export default function GameCanvas({
           dinoBox.y + dinoBox.height > obsBox.y
         ) {
           state.gameOver = true;
+          AudioManager.getInstance().playGameOverSound();
+          AudioManager.getInstance().stopBGM();
           onGameOver(state.score);
           return;
         }
@@ -382,6 +432,9 @@ export default function GameCanvas({
       const y = touch.clientY - rect.top;
       const isBottomHalf = y > rect.height / 2;
 
+      // Resume context on touch
+      AudioManager.getInstance().resumeContext();
+
       if (isBottomHalf) {
         // Tap on bottom half = duck
         duck(true);
@@ -398,15 +451,26 @@ export default function GameCanvas({
   }, [duck]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={CANVAS_WIDTH}
-      height={CANVAS_HEIGHT}
-      className='bg-gray-900 rounded-lg border border-gray-700 touch-none max-w-full h-auto'
-      style={{ width: '100%', maxWidth: CANVAS_WIDTH }}
-      onClick={jump}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    />
+    <>
+      <div className='absolute top-4 left-4 z-10'>
+        <button
+          onClick={toggleMute}
+          className='p-2 bg-gray-800/80 rounded-full text-white hover:bg-gray-700 transition-colors'
+          title={isMuted ? 'Unmute' : 'Mute'}
+        >
+          {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+        </button>
+      </div>
+      <canvas
+        ref={canvasRef}
+        width={CANVAS_WIDTH}
+        height={CANVAS_HEIGHT}
+        className='bg-gray-900 rounded-lg border border-gray-700 touch-none max-w-full h-auto'
+        style={{ width: '100%', maxWidth: CANVAS_WIDTH }}
+        onClick={jump}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      />
+    </>
   );
 }
