@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 interface LeaderboardEntry {
   rank: number;
@@ -22,9 +23,21 @@ interface LeaderboardEntry {
   createdAt: string;
 }
 
-async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
+interface LeaderboardResponse {
+  entries: LeaderboardEntry[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+const PAGE_SIZE = 10;
+
+async function fetchLeaderboard(page: number): Promise<LeaderboardResponse> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-  const response = await fetch(`${apiUrl}/api/leaderboard`);
+  const response = await fetch(
+    `${apiUrl}/api/leaderboard?page=${page}&limit=${PAGE_SIZE}`
+  );
 
   if (!response.ok) {
     throw new Error('Failed to fetch leaderboard');
@@ -35,17 +48,17 @@ async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
 
 export default function LeaderboardPage() {
   const router = useRouter();
+  const [page, setPage] = useState(1);
 
-  const {
-    data: entries = [],
-    isLoading,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: ['leaderboard'],
-    queryFn: fetchLeaderboard,
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['leaderboard', page],
+    queryFn: () => fetchLeaderboard(page),
     staleTime: 30 * 1000, // 30 seconds
   });
+
+  const entries = data?.entries ?? [];
+  const totalPages = data?.totalPages ?? 1;
+  const totalCount = data?.totalCount ?? 0;
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -70,6 +83,14 @@ export default function LeaderboardPage() {
     }
   };
 
+  const handlePrevPage = () => {
+    if (page > 1) setPage(page - 1);
+  };
+
+  const handleNextPage = () => {
+    if (page < totalPages) setPage(page + 1);
+  };
+
   return (
     <main className='min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-4'>
       <div className='max-w-2xl mx-auto'>
@@ -91,7 +112,14 @@ export default function LeaderboardPage() {
 
         <Card className='bg-gray-800/50 border-gray-700 backdrop-blur-sm'>
           <CardHeader>
-            <CardTitle className='text-white'>High Scores</CardTitle>
+            <div className='flex items-center justify-between'>
+              <CardTitle className='text-white'>High Scores</CardTitle>
+              {totalCount > 0 && (
+                <span className='text-gray-400 text-sm'>
+                  {totalCount} total entries
+                </span>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -125,41 +153,68 @@ export default function LeaderboardPage() {
                 </Button>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className='border-gray-700'>
-                    <TableHead className='text-gray-400 w-16'>Rank</TableHead>
-                    <TableHead className='text-gray-400'>Player</TableHead>
-                    <TableHead className='text-gray-400 text-right'>
-                      Score
-                    </TableHead>
-                    <TableHead className='text-gray-400 text-right'>
-                      Date
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {entries.map((entry) => (
-                    <TableRow
-                      key={`${entry.playerId}-${entry.createdAt}`}
-                      className='border-gray-700/50'
-                    >
-                      <TableCell className='font-medium text-white'>
-                        {getRankEmoji(entry.rank)}
-                      </TableCell>
-                      <TableCell className='text-gray-300'>
-                        {entry.playerName}
-                      </TableCell>
-                      <TableCell className='text-right text-white font-bold font-mono'>
-                        {entry.score.toLocaleString()}
-                      </TableCell>
-                      <TableCell className='text-right text-gray-500 text-sm'>
-                        {formatDate(entry.createdAt)}
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow className='border-gray-700'>
+                      <TableHead className='text-gray-400 w-16'>Rank</TableHead>
+                      <TableHead className='text-gray-400'>Player</TableHead>
+                      <TableHead className='text-gray-400 text-right'>
+                        Score
+                      </TableHead>
+                      <TableHead className='text-gray-400 text-right'>
+                        Date
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {entries.map((entry) => (
+                      <TableRow
+                        key={`${entry.playerId}-${entry.createdAt}`}
+                        className='border-gray-700/50'
+                      >
+                        <TableCell className='font-medium text-white'>
+                          {getRankEmoji(entry.rank)}
+                        </TableCell>
+                        <TableCell className='text-gray-300'>
+                          {entry.playerName}
+                        </TableCell>
+                        <TableCell className='text-right text-white font-bold font-mono'>
+                          {entry.score.toLocaleString()}
+                        </TableCell>
+                        <TableCell className='text-right text-gray-500 text-sm'>
+                          {formatDate(entry.createdAt)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className='flex items-center justify-between mt-6 pt-4 border-t border-gray-700'>
+                    <Button
+                      onClick={handlePrevPage}
+                      disabled={page === 1}
+                      variant='outline'
+                      className='border-gray-600 text-gray-300 hover:bg-gray-700 disabled:opacity-50'
+                    >
+                      ← Previous
+                    </Button>
+                    <span className='text-gray-400 text-sm'>
+                      Page {page} of {totalPages}
+                    </span>
+                    <Button
+                      onClick={handleNextPage}
+                      disabled={page === totalPages}
+                      variant='outline'
+                      className='border-gray-600 text-gray-300 hover:bg-gray-700 disabled:opacity-50'
+                    >
+                      Next →
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -98,6 +99,15 @@ type LeaderboardEntry struct {
 	CreatedAt  string `json:"createdAt"`
 }
 
+// LeaderboardResponse is the paginated response
+type LeaderboardResponse struct {
+	Entries    []LeaderboardEntry `json:"entries"`
+	TotalCount int                `json:"totalCount"`
+	Page       int                `json:"page"`
+	PageSize   int                `json:"pageSize"`
+	TotalPages int                `json:"totalPages"`
+}
+
 // HandleLeaderboard handles the leaderboard API endpoint
 func HandleLeaderboard(pool *pgxpool.Pool, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -113,14 +123,40 @@ func HandleLeaderboard(pool *pgxpool.Pool, w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Parse pagination params
+	page := 1
+	pageSize := 10
+
+	if p := r.URL.Query().Get("page"); p != "" {
+		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 100 {
+			pageSize = parsed
+		}
+	}
+
+	offset := (page - 1) * pageSize
+
 	ctx := context.Background()
 
+	// Get total count
+	var totalCount int
+	err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM leaderboard").Scan(&totalCount)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Get paginated entries
 	rows, err := pool.Query(ctx, `
 		SELECT player_id, player_name, score, created_at
 		FROM leaderboard
 		ORDER BY score DESC
-		LIMIT 100
-	`)
+		LIMIT $1 OFFSET $2
+	`, pageSize, offset)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -128,7 +164,7 @@ func HandleLeaderboard(pool *pgxpool.Pool, w http.ResponseWriter, r *http.Reques
 	defer rows.Close()
 
 	var entries []LeaderboardEntry
-	rank := 1
+	rank := offset + 1
 	for rows.Next() {
 		var entry LeaderboardEntry
 		var createdAt time.Time
@@ -145,5 +181,18 @@ func HandleLeaderboard(pool *pgxpool.Pool, w http.ResponseWriter, r *http.Reques
 		entries = []LeaderboardEntry{}
 	}
 
-	json.NewEncoder(w).Encode(entries)
+	totalPages := (totalCount + pageSize - 1) / pageSize
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	response := LeaderboardResponse{
+		Entries:    entries,
+		TotalCount: totalCount,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}
+
+	json.NewEncoder(w).Encode(response)
 }
