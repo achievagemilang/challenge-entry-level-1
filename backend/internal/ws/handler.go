@@ -102,8 +102,14 @@ func handleMessage(client *Client, matchmaker Matchmaker, pgPool *pgxpool.Pool, 
 
 		// Validate score (anti-cheat: score shouldn't jump more than 50 per update)
 		if payload.Score-client.Score > 50 {
-			log.Printf("Suspicious score jump from client %s: %d -> %d", client.ID, client.Score, payload.Score)
-			// Could flag as cheater or disconnect
+			log.Printf("Suspicious score jump from client %s: %d -> %d (rejected)",
+				client.ID, client.Score, payload.Score)
+			// Reject the update - notify opponent with last valid score
+			notifyOpponent(client, "OPPONENT_UPDATE", OpponentUpdatePayload{
+				Score:   client.Score,
+				IsAlive: client.IsAlive,
+			})
+			return // Don't process this suspicious update
 		}
 
 		client.Score = payload.Score
