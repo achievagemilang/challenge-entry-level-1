@@ -6,8 +6,10 @@ export type MessageType =
   | 'JOIN_QUEUE'
   | 'UPDATE_SCORE'
   | 'PLAYER_DIED'
+  | 'LEAVE_GAME'
   | 'GAME_START'
   | 'OPPONENT_UPDATE'
+  | 'OPPONENT_LEFT'
   | 'GAME_OVER';
 
 export interface GameStartPayload {
@@ -131,6 +133,10 @@ export class GameSocket {
 
   playerDied(score: number): void {
     this.send('PLAYER_DIED', { score });
+  }
+
+  leaveGame(): void {
+    this.send('LEAVE_GAME', {});
   }
 
   disconnect(): void {

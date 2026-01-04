@@ -33,6 +33,7 @@ export default function GamePage() {
   const [isWinner, setIsWinner] = useState<boolean | null>(null);
   const [countdown, setCountdown] = useState<number | null>(3);
   const [myAlive, setMyAlive] = useState(true);
+  const [opponentLeft, setOpponentLeft] = useState(false);
 
   // Load game data from session storage
   useEffect(() => {
@@ -72,6 +73,13 @@ export default function GamePage() {
       setOpponentAlive(data.isAlive);
     };
 
+    const handleOpponentLeft = (payload: unknown) => {
+      const data = payload as OpponentUpdatePayload;
+      setOpponentScore(data.score);
+      setOpponentAlive(false);
+      setOpponentLeft(true);
+    };
+
     const handleGameOver = (payload: unknown) => {
       const data = payload as GameOverPayload;
       setGameOver(true);
@@ -91,10 +99,12 @@ export default function GamePage() {
     };
 
     socket.on('OPPONENT_UPDATE', handleOpponentUpdate);
+    socket.on('OPPONENT_LEFT', handleOpponentLeft);
     socket.on('GAME_OVER', handleGameOver);
 
     return () => {
       socket.off('OPPONENT_UPDATE', handleOpponentUpdate);
+      socket.off('OPPONENT_LEFT', handleOpponentLeft);
       socket.off('GAME_OVER', handleGameOver);
     };
   }, []);
@@ -116,6 +126,14 @@ export default function GamePage() {
     socket.playerDied(score);
   }, []);
 
+  const handleLeaveGame = useCallback(() => {
+    // Player wants to leave early (after dying) to play again
+    const socket = getSocket();
+    socket.leaveGame();
+    sessionStorage.removeItem('gameData');
+    router.push('/');
+  }, [router]);
+
   const handleBackToLobby = () => {
     sessionStorage.removeItem('gameData');
     router.push('/');
@@ -131,6 +149,9 @@ export default function GamePage() {
         <h1 className='text-2xl font-bold text-white'>
           🦖 {gameData.myName} VS {gameData.opponentName} 🦖
         </h1>
+        {opponentLeft && (
+          <p className='text-yellow-400 text-sm mt-1'>Opponent left the game</p>
+        )}
       </div>
 
       {/* Game Container */}
@@ -155,6 +176,7 @@ export default function GamePage() {
           myAlive={myAlive}
           gameOver={gameOver}
           isWinner={isWinner}
+          onLeaveGame={handleLeaveGame}
         />
 
         {/* Game Canvas */}

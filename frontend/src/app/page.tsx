@@ -40,9 +40,7 @@ export default function LobbyPage() {
         setIsConnected(true);
         setError(null);
       } catch {
-        setError(
-          'Failed to connect to server. Make sure the backend is running.'
-        );
+        setError('Failed to connect to server.');
         setIsConnected(false);
       }
     };

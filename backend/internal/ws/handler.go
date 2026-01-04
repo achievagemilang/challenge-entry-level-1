@@ -191,6 +191,32 @@ func handleMessage(client *Client, matchmaker Matchmaker, pgPool *pgxpool.Pool, 
 		}
 		// If not all dead, the surviving player continues playing
 		// They already received OPPONENT_UPDATE notification that opponent died
+
+	case "LEAVE_GAME":
+		// Player wants to leave the game early (after dying)
+		// Save their score and clean up their state
+		if client.RoomID == "" {
+			return // Not in a game
+		}
+
+		log.Printf("Player %s leaving game with score %d", client.ID, client.Score)
+
+		// Save the player's score to leaderboard
+		if err := db.SaveScore(pgPool, client.ID, client.Name, client.Score); err != nil {
+			log.Printf("Failed to save score on leave: %v", err)
+		}
+
+		// Notify opponent that this player left
+		notifyOpponent(client, "OPPONENT_LEFT", OpponentUpdatePayload{
+			Score:   client.Score,
+			IsAlive: false,
+		})
+
+		// Clean up this player's state so they can rejoin queue
+		client.RoomID = ""
+		client.IsAlive = true
+		client.Score = 0
+		client.InQueue = false
 	}
 }
 
