@@ -36,6 +36,26 @@ interface Obstacle {
 // Bird height types that are always beatable
 type BirdHeight = 'high' | 'low';
 
+// Game constants
+const CANVAS_WIDTH = 800;
+const CANVAS_HEIGHT = 500;
+const GROUND_Y = CANVAS_HEIGHT - 50;
+const DINO_WIDTH = 40;
+const DINO_HEIGHT = 50;
+const DINO_DUCK_HEIGHT = 25;
+const GRAVITY = 0.6;
+const JUMP_FORCE = -12;
+
+// Fixed obstacle dimensions for consistent, beatable gameplay
+const CACTUS_WIDTH = 25;
+const CACTUS_HEIGHT = 45;
+const BIRD_WIDTH = 35;
+const BIRD_HEIGHT = 25;
+
+// Bird Y positions
+const BIRD_HIGH_Y = GROUND_Y - 80;
+const BIRD_LOW_Y = GROUND_Y - 35;
+
 export default function GameCanvas({
   seed,
   isRunning,
@@ -56,27 +76,6 @@ export default function GameCanvas({
     lastObstacleType: null as 'cactus' | 'bird' | null,
     framesSinceLastObstacle: 0,
   });
-
-  const CANVAS_WIDTH = 800;
-  const CANVAS_HEIGHT = 300;
-  const GROUND_Y = 250;
-  const DINO_WIDTH = 40;
-  const DINO_HEIGHT = 50;
-  const DINO_DUCK_HEIGHT = 25;
-  const GRAVITY = 0.6;
-  const JUMP_FORCE = -12;
-
-  // Fixed obstacle dimensions for consistent, beatable gameplay
-  const CACTUS_WIDTH = 25;
-  const CACTUS_HEIGHT = 45; // Fixed height - jumpable
-  const BIRD_WIDTH = 35;
-  const BIRD_HEIGHT = 25;
-
-  // Bird Y positions:
-  // HIGH bird: player can run under it (no action needed) or jump into it
-  // LOW bird: player must jump over it
-  const BIRD_HIGH_Y = GROUND_Y - 80; // High enough to run under
-  const BIRD_LOW_Y = GROUND_Y - 35; // Must jump over
 
   const resetGame = useCallback(() => {
     const state = gameStateRef.current;
@@ -404,7 +403,8 @@ export default function GameCanvas({
       ref={canvasRef}
       width={CANVAS_WIDTH}
       height={CANVAS_HEIGHT}
-      className='bg-gray-900 rounded-lg border border-gray-700 touch-none'
+      className='bg-gray-900 rounded-lg border border-gray-700 touch-none max-w-full h-auto'
+      style={{ width: '100%', maxWidth: CANVAS_WIDTH }}
       onClick={jump}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
